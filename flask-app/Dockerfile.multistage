@@ -1,0 +1,45 @@
+# stage 1
+
+FROM node:8.11.2-alpine as node
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+RUN npm run build
+
+# stage 2
+FROM alpine:3.11
+
+RUN apk update && \
+    apk add --no-cache python2 py2-pip ca-certificates nodejs npm && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+COPY --from=node app/static/build/main.js app/static/build/main.js
+COPY --from=node app/node_modules app/node_modules
+
+ADD http://api.internal.netfree.link/ca/netfree-ca.crt /usr/local/share/ca-certificates/netfree-ca.crt
+
+RUN update-ca-certificates
+
+ENV NODE_EXTRA_CA_CERTS /etc/ssl/certs/ca-certificates.crt
+ENV REQUESTS_CA_BUNDLE /etc/ssl/certs/ca-certificates.crt
+ENV SSL_CERT_FILE /etc/ssl/certs/ca-certificates.crt
+
+RUN pip config set global.cert /usr/lib/ssl/certs/ca-certificates.crt
+
+COPY requirements.txt .
+
+RUN pip install -r requirements.txt 
+
+COPY . .
+
+EXPOSE 5000
+
+CMD ["python","./app.py"]
